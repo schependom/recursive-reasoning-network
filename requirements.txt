@@ -1,0 +1,5 @@
+torch
+pandas==2.3.3
+numpy<2.0.0
+arg-magic @ git+https://github.com/phohenecker/arg-magic
+reldata @ git+https://github.com/phohenecker/rel-data
