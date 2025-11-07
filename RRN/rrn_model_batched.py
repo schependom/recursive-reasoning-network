@@ -501,6 +501,10 @@ class ClassesMLP(nn.Module):
     Args:
         embedding_size:     Dimensionality of input embeddings
         classes_count:      Number of classes to predict
+        num_hidden_layers:  Number of hidden layers
+
+    Paper:
+        MLP^{C_i} = P(<s, member_of, C_i> | KB)
     """
 
     def __init__(
@@ -562,7 +566,12 @@ class RelationMLP(nn.Module):
     MLP for predicting relation existence between entity pairs.
 
     Args:
-        embedding_size: Dimensionality of input embeddings
+        embedding_size:     Dimensionality of input embeddings
+        hidden_size:        Size of hidden layers
+        num_hidden_layers:  Number of hidden layers
+
+    Paper:
+        MLP^{R_i} = P(<s, R_i, o> | KB)
     """
 
     def __init__(
@@ -617,4 +626,5 @@ class RelationMLP(nn.Module):
         x = self.output_layer(x)
 
         # Return logits (no sigmoid; use BCEWithLogitsLoss)
+        # for calculating P(<s, R_i, o> | KB) with sigmoid
         return x

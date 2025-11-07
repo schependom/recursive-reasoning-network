@@ -52,14 +52,15 @@ from collections import defaultdict
 from globals import EMBEDDING_SIZE, ITERATIONS, VERBOSE, DATA_TYPE
 
 # Own modules
-from data_structures import KnowledgeGraph, Triple, DataType
-from rrn_model_batched import RRN, ClassesMLP, RelationMLP
+from data_structures import Triple, DataType
+from rrn_model_batched import RRN
 from data_loader import (
     load_knowledge_graphs,
     preprocess_knowledge_graph,
     custom_collate_fn,
 )
 from device import get_device
+from tt_common import initialize_model
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -139,13 +140,19 @@ def compute_loss(
     # TODO Check if the embeddings are already on the correct device
     # TODO Check if we actually need to mask the unknowns here, because if 1_KB(i) = 0, then the RRN model should predict 0 as well.
 
+    # ---------------------- FORWARD PASS THROUGH CLASS MLP ---------------------- #
+
     # Batch prediction logits for all individuals
     cls_logits = mlps[0](embeddings)  # (Bt, C)
+
+    # ------------------------------ CLASS TARGETS ------------------------------ #
 
     # Targets tensor
     targets_tensor_cls = torch.as_tensor(
         membership_targets, dtype=torch.float32, device=device
     )
+
+    # ----------------------------------- MASK ----------------------------------- #
 
     # Mask is
     #   1.0 where label is NOT unknown (±1)
@@ -163,6 +170,8 @@ def compute_loss(
 
     # Apply mask to zero out losses for unspecified class memberships in targets
     masked_class_loss = unreduced_class_loss * mask
+
+    # ----------------------------------- LOSS ----------------------------------- #
 
     # Average loss over known labels only
     num_known_labels = mask.sum().to(device=device)
@@ -194,14 +203,23 @@ def compute_loss(
         o_indices = [t.object.index for t in triples_list]
 
         # Targets are 1.0 for positive, 0.0 for negative
+        #   ->  Because we calculate P(<s, R_i, o> | KB) with a sigmoid, based on the logits.
+        #   ->  The chance of a negative triple is P(<s, ~R_i, o> | KB) = 1 - P(<s, R_i, o> | KB)
         rel_targets = [1.0 if t.positive else 0.0 for t in triples_list]
 
         s_emb = embeddings[s_indices, :]  # [Bt, d]
         o_emb = embeddings[o_indices, :]  # [Bt, d]
 
-        # mlps[0] is for classes
-        # So relation MLPs start from index 1
+        # --------------------- FORWARD PASS THROUGH RELATION MLP -------------------- #
+
+        # Calculate logits that we feed into sigmoid to calculate
+        #       P(<s, R_i, o> | KB),
+        #       P(<s, ~R_i, o> | KB) = 1 - P(<s, R_i, o> | KB)
+        #
+        # mlps[0] is for classes, so relation MLPs start from index 1
         rel_logits = mlps[pred_idx + 1](s_emb, o_emb)  # [Bt, 1]
+
+        # ---------------------------------- TARGETS --------------------------------- #
 
         # Convert to tensor and unsqueeze from [Bt]
         # to [Bt, 1], to match rel_logits shape.
@@ -233,6 +251,8 @@ def compute_loss(
             # Apply this weight ONLY to positive (target == 1.0) samples
             all_weights[rel_targets == 1.0] = pos_weight_val
 
+        # -------------------------- ACTUAL LOSS COMPUTATION ------------------------- #
+
         # Compute un-reduced BCEWithLogits loss
         # per sample (not averaged)
         unreduced_loss = non_reduced_criterion(rel_logits, rel_targets)
@@ -257,7 +277,9 @@ def compute_loss(
     else:
         total_relation_loss = torch.zeros((), device=device)
 
-    # ------------------------------ TOTAL LOSS ------------------------------ #
+    # ---------------------------------------------------------------------------- #
+    #                                  TOTAL LOSS                                  #
+    # ---------------------------------------------------------------------------- #
 
     # Total loss is sum of (average) class and (average) relation losses
     total_loss = total_class_loss + total_relation_loss
@@ -275,7 +297,7 @@ def train_epoch(
     verbose: bool = True,
 ) -> Tuple[float, float, float]:
     """
-    Trains the model for one epoch.
+    Trains the model for one epoch, so for all batches (all single KB's) in the dataset.
 
     Args:
         rrn:            Relational Reasoning Network
@@ -326,7 +348,7 @@ def train_epoch(
             # Forward pass through RRN to get embeddings
             embeddings = rrn(triples, membership_targets).to(device)
 
-            # Compute loss
+            # Perform forward pass through MLPs and compute losses
             total_loss, class_loss, relation_loss = compute_loss(
                 mlps=mlps,
                 embeddings=embeddings,
@@ -460,21 +482,12 @@ def train(
         f"{len(sample_kg.relations)} relations"
     )
 
-    # Use ontology of the first knowledge graph to initialize the model
-    rrn = RRN(
+    rrn, mlps = initialize_model(
         embedding_size=embedding_size,
         iterations=iterations,
-        classes=sample_kg.classes,
-        relations=sample_kg.relations,
-    ).to(device)
-
-    # ----------- Initialize MLPs for predicting classes and relations ----------- #
-
-    # Initialize MLPs
-    mlps = nn.ModuleList()
-    mlps.append(ClassesMLP(embedding_size, len(sample_kg.classes)).to(device))
-    for _ in sample_kg.relations:
-        mlps.append(RelationMLP(embedding_size).to(device))
+        reference_kg=sample_kg,
+        device=device,
+    )
 
     # ------------------------------ Setup optimizer ----------------------------- #
 
@@ -485,7 +498,7 @@ def train(
         weight_decay=weight_decay,
     )
 
-    # --------------------------- Start training loop --------------------------- #
+    # --------------------------- Setup training loop --------------------------- #
 
     # Prepare data loader with batch size 1 (1 KG per batch)
     dataloader = DataLoader(
