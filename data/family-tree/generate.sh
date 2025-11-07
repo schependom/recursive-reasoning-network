@@ -29,12 +29,7 @@
 # version:  2018.1
 # date:     May 28, 2018
 
-# TODO make it so that it generates 
-#   - out/train-5000
-#   - out/test-500
-#   - out/train-200
-#   - out/test-20
-# Where train and test are disjoint sets of family trees.
-
 export PYTHONPATH="`pwd`/src/main/python:${PYTHONPATH}"
+
+# Generate the data with passed arguments
 python3 -m ftdatagen "${@}"
