@@ -9,9 +9,8 @@ I recommend using Python 3.9.20 - because of compatibility issues with certain p
 From the root directory of this repository, run the following commands to create and activate a new conda environment, and install the required packages:
 
 ```bash
-conda create -n rrn python=3.9.20
+conda create -n rrn python=3.9.20 -r requirements.txt
 conda activate rrn
-pip install -r requirements.txt
 ```
 
 ## Generating train and test data
@@ -35,44 +34,64 @@ Therefore, you have to download the DLV executable for your platform from the
 After you have downloaded and extracted the DLV executable, copy the path to the executable file. Then, export this path as an environment variable:
 
 ```bash
-export DLV_PATH=/path/to/dlv/executable
+echo "export DLV_PATH=/path/to/dlv/executable" >> ~/.bashrc
+source ~/.bashrc
 ```
 
 ---
 
 ### Generating the _Family Tree_ data
 
-To generate the _family tree_ datasets, run the following scripts:
+To generate the _family tree_ datasets, navigate to the `data/family-tree` directory:
 
 ```bash
-./data/family-tree/generate.sh [options] /path/to/dlv/executable
+cd data/family-tree
 ```
 
-For example, use the following command to generate the data with the default parameters:
+Then, you can run the `generate.sh` script with the desired options:
 
 ```bash
-./data/family-tree/generate.sh $DLV_PATH
+./generate.sh [options] /path/to/dlv/executable
+```
+
+Because we set the `DLV_PATH` environment variable above, we can simply run:
+
+```bash
+./generate.sh [options] $DLV_PATH
 ```
 
 #### Options
 
 -   `--seed`: Random seed for data generation
--   `--max_branching_factor`: (default: `5`)
--   `--max_tree_depth`: (default: `5`)
--   `--max_tree_size`: (default: `26`)
--   `--negative_facts`: Boolean flag indicating whether to generate negative facts (default: `false`)
--   `--num_samples`: Number of individuals in the family tree
--   `--output_dir`: Directory to save the generated data (default: `./out`)
--   `--stop_prob`: (default: `0.0`)
+-   `--max-branching-factor`: (default: `5`)
+-   `--max-tree-depth`: (default: `5`)
+-   `--max-tree-size`: (default: `26`)
+-   `--negative-facts`: Boolean flag indicating whether to generate negative facts (default: `false`)
+-   `--num-samples`: Number of individuals in the family tree
+-   `--output-dir`: Directory to save the generated data (default: `./out`)
+-   `--stop-prob`: (default: `0.0`)
 
 #### Generating 200 train and 20 test samples with default parameters
 
+Again, from the `data/family-tree` directory, run:
+
 ```bash
-./data/family-tree/generate.sh --num_samples 200 --output_dir data/family-tree/out/train $DLV_PATH
-./data/family-tree/generate.sh --num_samples 20 --output_dir data/family-tree/out/test $DLV_PATH
+./generate.sh --num-samples 200 --output-dir /out/train $DLV_PATH
+./generate.sh --num-samples 20 --output-dir /out/test $DLV_PATH
 ```
 
 #### Generating 5000 train and 500 test samples like in the original paper
+
+```bash
+./generate.sh --num-samples 5000 --output-dir /out/train $DLV_PATH
+./generate.sh --num-samples 500 --output-dir /out/test $DLV_PATH
+```
+
+## Training the model
+
+Work in progress.
+
+## Testing the model
 
 ```bash
 ./data/family-tree/generate.sh --num_samples 5000 --output_dir data/family-tree/out/train $DLV_PATH

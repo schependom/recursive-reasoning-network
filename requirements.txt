@@ -1,11 +1,11 @@
 torch
 pandas==2.3.3
 numpy<2.0.0
-arg-magic @ git+https://github.com/phohenecker/arg-magic
+argmagic @ git+https://github.com/phohenecker/arg-magic
 reldata @ git+https://github.com/phohenecker/rel-data
 
 # Data generators
 insanity>=2017.1
 networkx>=2.3
 streamtologger>=2017.1
-asp-wrapper @ git+https://github.com/phohenecker/asp-wrapper
+aspwrapper @ git+https://github.com/phohenecker/asp-wrapper
