@@ -4,12 +4,12 @@ This repository contains a PyTorch implementation of the Recursive Reasoning Net
 
 ## Generating train and test data
 
-To generate training and testing data, you can use the dataset generators available in the following repositories:
+To generate training and testing data, I make use of the source code provided by the original author of the RRN paper:
 
 -   [Family Tree dataset generator](https://github.com/phohenecker/family-tree-data-gen)
 -   [Country dataset generator](https://github.com/phohenecker/country-data-gen)
 
-Both of these repos use the [rel-data](https://github.com/phohenecker/rel-data) library for generating synthetic data, which is not so easy to use because of missing documentation and outdated dependencies.d
+Both of these data generators use the [rel-data](https://github.com/phohenecker/rel-data) library for generating synthetic data, which is not so easy to use because of missing documentation and outdated dependencies.d
 
 I recommend using Python 3.9.20 and have provided a `requirements.txt` file for installing the necessary dependencies.
 
@@ -52,7 +52,3 @@ Work in progress.
 -   [Family Tree dataset generator](https://github.com/phohenecker/family-tree-data-gen)
 
 -   [Country dataset generator](https://github.com/phohenecker/country-data-gen)
-
-```
-
-```
