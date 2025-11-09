@@ -36,7 +36,7 @@ import os
 
 # Own modules
 from data_structures import KnowledgeGraph, Triple, DataType
-from RRN.rrn_model_batched import RRN, ClassesMLP, RelationMLP
+from rrn_model_batched import RRN, ClassesMLP, RelationMLP
 from data_loader import load_knowledge_graphs, preprocess_knowledge_graph
 from device import get_device
 from tt_common import initialize_model
@@ -362,7 +362,7 @@ def test_on_knowledge_graph(
 
         # Evaluate class membership predictions
         class_accuracies = evaluate_classes(
-            mlps[0], embeddings, test_kg, membership_labels, device
+            mlps[0], embeddings, membership_labels, device
         )
 
         # Evaluate relation predictions

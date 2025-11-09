@@ -9,8 +9,8 @@ I recommend using Python 3.9.20 - because of compatibility issues with certain p
 From the root directory of this repository, run the following commands to create and activate a new conda environment, and install the required packages:
 
 ```bash
-conda create -n rrn python=3.9.20 -r requirements.txt
-conda activate rrn
+conda create -f environment.yaml
+conda activate RRN
 ```
 
 ## Generating train and test data

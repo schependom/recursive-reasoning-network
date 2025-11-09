@@ -32,7 +32,7 @@ from typing import Tuple
 
 # Own modules
 from data_structures import KnowledgeGraph
-from RRN.rrn_model_batched import RRN, ClassesMLP, RelationMLP
+from rrn_model_batched import RRN, ClassesMLP, RelationMLP
 
 
 def initialize_model(

@@ -67,6 +67,11 @@ class KnowledgeGraph:
     relations,      (relation index, relation name)
     individuals,    (individual index, individual name)
     triples.        (subject, predicate, object, positive, is_fact)
+
+    NOTE:
+        The `.index` attribute of each Class, Relation, and Individual
+        object (e.g., `individuals[i].index`) MUST be equal to its
+        index in its respective list (e.g., `i`). This allows for O(1) lookups.
     """
 
     classes: List[Class]
