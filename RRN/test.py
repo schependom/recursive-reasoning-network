@@ -631,8 +631,8 @@ if __name__ == "__main__":
     print(f"Checkpoint Directory: {checkpoint_dir}")
 
     # Get the base data directory
-    BASE_DIR = os.environ.get("REPO")
-    data_dir = os.path.join(BASE_DIR, "data/family-tree/generated/test-5")
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    data_dir = os.path.join(BASE_DIR, "data/family-tree/out/test-20")
 
     # print to std error
     print(f"Data directory: {data_dir}")

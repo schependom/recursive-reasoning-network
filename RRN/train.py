@@ -610,17 +610,17 @@ if __name__ == "__main__":
     checkpoint_subdir = sys.argv[1]
 
     # Get the base data directory
-    BASE_DIR = os.environ.get("REPO")
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     print(f"Base dir: {BASE_DIR}")
 
-    data_dir = os.path.join(BASE_DIR, "data/family-tree/generated/train-10")
+    data_dir = os.path.join(BASE_DIR, "data/family-tree/out/train-200")
 
     print(f"Data directory: {data_dir}")
 
     # Example usage
     train(
-        nb_kgs=1,
+        nb_kgs=200,
         data_dir=data_dir,
         embedding_size=EMBEDDING_SIZE,
         iterations=ITERATIONS,
