@@ -49,7 +49,7 @@ from typing import List, Tuple
 from collections import defaultdict
 
 # Global settings
-from globals import EMBEDDING_SIZE, ITERATIONS, VERBOSE, DATA_TYPE
+from globals import EMBEDDING_SIZE, ITERATIONS, VERBOSE
 
 # Own modules
 from data_structures import Triple, DataType
@@ -326,19 +326,21 @@ def train_epoch(
     # Iterate over batches
     for batch_idx, batch in enumerate(dataloader):
         # Unpack batch (always size 1)
-        triples, membership_targets = batch
+        batch_data_dict = batch
 
-        # Triples are either
-        # -> all triples (DataType.ALL)
-        # -> inferred triples (DataType.INF)
-        # -> specific triples (DataType.SPEC)
+        base_triples = batch_data_dict["base_triples"]
+        base_memberships = batch_data_dict["base_memberships"]
+        # inferred_triples = batch_data_dict["inferred_triples"]
+        # inferred_memberships = batch_data_dict["inferred_memberships"]
+        all_triples = batch_data_dict["all_triples"]
+        all_memberships = batch_data_dict["all_memberships"]
 
         # Zero gradients
         optimizer.zero_grad()
 
         if verbose:
             print(
-                f"Batch {batch_idx + 1}/{len(dataloader)} of size {len(triples)} triples on device {device}"
+                f"Batch {batch_idx + 1}/{len(dataloader)} of size {len(base_triples)} base fact triples on device {device}"
             )
 
         # Autocast enables mixed precision, which speeds up training on CUDA devices.
@@ -346,14 +348,15 @@ def train_epoch(
         # If running on a non-CUDA device, it runs in float32.
         with autocast("cuda", enabled=(use_amp and device.type == "cuda")):
             # Forward pass through RRN to get embeddings
-            embeddings = rrn(triples, membership_targets).to(device)
+            embeddings = rrn(base_triples, base_memberships).to(device)
 
             # Perform forward pass through MLPs and compute losses
+            # ! CRUCIAL: We compute loss on ALL triples and ALL memberships (both base facts and inferred)
             total_loss, class_loss, relation_loss = compute_loss(
                 mlps=mlps,
                 embeddings=embeddings,
-                triples=triples,
-                membership_targets=membership_targets,
+                triples=all_triples,
+                membership_targets=all_memberships,
                 device=device,
             )
 
@@ -417,7 +420,6 @@ def train(
     max_epochs: int = 1000,
     checkpoint_path: str = "checkpoints",
     loader_workers: int = None,
-    data_type: DataType = DataType.ALL,
     verbose: bool = True,
     checkpoint_subdir: str = "",
 ) -> None:
@@ -435,7 +437,6 @@ def train(
         max_epochs          : Maximum number of training epochs
         checkpoint_path     : Directory for checkpoints
         loader_workers      : Number of parallel workers for loading KGs (default: CPU count - 1)
-        data_type           : Type of data to preprocess (inference, prediction, all)
         verbose             : Whether to print batch-level progress
         checkpoint_subdir   : Subdirectory for this training run's checkpoints
     """
@@ -466,9 +467,15 @@ def train(
     train_kgs = kg_list[0:nb_kgs]  # exclusive end index
 
     # Preprocess graphs:
-    #   KG -> [(triples, membership_targets), ...]
+    #   KG -> dict with:
+    #       - base_triples
+    #       - base_memberships
+    #       - inferred_triples
+    #       - inferred_memberships
+    #       - all_triples
+    #       - all_memberships
     print("Preprocessing knowledge graphs...")
-    processed_data = [preprocess_knowledge_graph(kg, data_type) for kg in train_kgs]
+    processed_data = [preprocess_knowledge_graph(kg) for kg in train_kgs]
 
     # ---------------------- Initialize RNN embedding model ---------------------- #
 
@@ -627,7 +634,6 @@ if __name__ == "__main__":
         learning_rate=0.001,
         weight_decay=1e-6,
         patience=10,
-        data_type=DATA_TYPE,
         verbose=VERBOSE,
         checkpoint_subdir=checkpoint_subdir,
     )

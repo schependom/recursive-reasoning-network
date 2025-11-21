@@ -25,6 +25,7 @@ NOTATION
 """
 
 # PyTorch
+from collections import defaultdict
 import torch
 import torch.nn as nn
 
@@ -40,7 +41,7 @@ from rrn_model_batched import RRN, ClassesMLP, RelationMLP
 from data_loader import load_knowledge_graphs, preprocess_knowledge_graph
 from device import get_device
 from tt_common import initialize_model
-from globals import EMBEDDING_SIZE, ITERATIONS, VERBOSE, DATA_TYPE
+from globals import EMBEDDING_SIZE, ITERATIONS, VERBOSE, TEST_BASE_FACTS
 
 
 def load_model_checkpoint(
@@ -239,64 +240,89 @@ def evaluate_triples(
     embeddings: torch.Tensor,
     triples: List[Triple],
     device: torch.device,
-) -> Tuple[Dict[str, float], List[torch.Tensor]]:
+) -> dict[str, float]:
     """
-    Evaluates relation predictions.
+    Evaluates relation predictions using batched processing for speed.
+
+    Instead of iterating through triples one by one, we group them by
+    predicate index. This allows us to pass all subject/object pairs
+    for a specific relation into the MLP in a single tensor operation.
 
     Args:
-        mlps      : List of MLPs (first one is for classes, rest for relations)
+        mlps      : List of MLPs (index 0 is classes, indices 1..R are relations)
         embeddings: Entity embeddings from RRN (num_individuals, embedding_dim)
         triples   : List of relation triples to evaluate
         device    : Device to run evaluation on
 
     Returns:
-        Tuple of (accuracy, list of per-triple scores, positive scores, negative scores)
+        Dictionary of accuracies with 'all', 'positive', 'negative' keys.
     """
-    triple_scores = []
-    positive_scores = []
-    negative_scores = []
+    # 1. Group triples by predicate index
+    #    We need to do this because different predicates use different MLP heads.
+    grouped_triples = defaultdict(list)
+    for t in triples:
+        grouped_triples[t.predicate.index].append(t)
 
-    # TODO calculate all pred_logits at once for efficiency
+    # buffers to collect boolean hits (1.0 if correct, 0.0 if wrong)
+    all_hits = []
+    pos_hits = []
+    neg_hits = []
 
-    for triple in triples:
-        pred_idx = triple.predicate.index
-        subj_idx = triple.subject.index
-        obj_idx = triple.object.index
+    with torch.no_grad():
+        for pred_idx, group in grouped_triples.items():
+            # 2. Prepare batch tensors
+            # Extract indices and targets for this group
+            s_indices = [t.subject.index for t in group]
+            o_indices = [t.object.index for t in group]
 
-        # Get MLP logits for this triple, where
-        #   sigmoid(MLP_logit) = P(<s, R, o> | KB)
-        #   P(<s, ~R, o> | KB) = 1 - P(<s, R, o> | KB)
-        pred_logit = mlps[pred_idx + 1](embeddings[subj_idx, :], embeddings[obj_idx, :])
+            # Target: 1.0 for positive, 0.0 for negative
+            # unsqueeze(1) makes shape (Batch, 1) to match MLP output
+            targets = torch.tensor(
+                [1.0 if t.positive else 0.0 for t in group],
+                dtype=torch.float32,
+                device=device,
+            ).unsqueeze(1)
 
-        # Set target based on whether triple is positive or negative
-        if triple.positive:
-            target = torch.tensor([1.0], dtype=torch.float32, device=device)
-        else:
-            target = torch.tensor([0.0], dtype=torch.float32, device=device)
+            # 3. Fetch Embeddings in batch
+            # Shape: (Batch_Size, Embedding_Dim)
+            batch_s_emb = embeddings[s_indices]
+            batch_o_emb = embeddings[o_indices]
 
-        # sigmoid(pred_logit) = P(<s, R, o> | KB)
-        prediction = torch.sigmoid(pred_logit)
+            # 4. Forward Pass
+            # Remember: mlps[0] is classes, so relation MLPs start at index + 1
+            logits = mlps[pred_idx + 1](batch_s_emb, batch_o_emb)
+            predictions = torch.sigmoid(logits).round()
 
-        # Score = 1.0 if prediction matches target, else 0.0
-        score = (prediction.round() == target).float()
+            # 5. Compare matches
+            # hits is a tensor of 1s (correct) and 0s (wrong)
+            hits = (predictions == targets).float().squeeze(1)
 
-        # Collect scores
-        triple_scores.append(score)
-        if triple.positive:
-            positive_scores.append(score)
-        else:
-            negative_scores.append(score)
+            # 6. Separate positive and negative performance for metrics
+            # We need to map back to the original list to know which were pos/neg
+            # Construct masks based on the targets we created earlier
+            is_positive = targets.squeeze(1) == 1.0
+            is_negative = targets.squeeze(1) == 0.0
 
-    # Compute overall accuracy, handling cases with no facts
+            all_hits.append(hits)
+            if is_positive.any():
+                pos_hits.append(hits[is_positive])
+            if is_negative.any():
+                neg_hits.append(hits[is_negative])
+
+    # 7. Aggregate results
+    # Concatenate list of tensors into single tensors
+    all_hits_t = torch.cat(all_hits) if all_hits else torch.tensor([])
+    pos_hits_t = torch.cat(pos_hits) if pos_hits else torch.tensor([])
+    neg_hits_t = torch.cat(neg_hits) if neg_hits else torch.tensor([])
+
+    # Calculate means (accuracies)
     triple_accuracies = {
-        "all": torch.cat(triple_scores).mean().item()
-        if triple_scores
+        "all": all_hits_t.mean().item() if all_hits_t.numel() > 0 else float("nan"),
+        "positive": pos_hits_t.mean().item()
+        if pos_hits_t.numel() > 0
         else float("nan"),
-        "positive": torch.cat(positive_scores).mean().item()
-        if positive_scores
-        else float("nan"),
-        "negative": torch.cat(negative_scores).mean().item()
-        if negative_scores
+        "negative": neg_hits_t.mean().item()
+        if neg_hits_t.numel() > 0
         else float("nan"),
     }
 
@@ -309,17 +335,18 @@ def test_on_knowledge_graph(
     test_kg: KnowledgeGraph,
     device: torch.device,
     verbose: bool = True,
-    data_type: DataType = DataType.ALL,
+    test_base_facts: bool = True,
 ) -> Tuple[Dict[str, float], Dict[str, float]]:
     """
     Tests the model, trained on an ontology Σ, on a single knowledge graph D_i.
 
     Args:
-        rrn    : Trained RRN model
-        mlps   : Trained MLP classifiers
-        test_kg: Knowledge graph to test on (must share ontology with training)
-        device : Device to run evaluation on
-        verbose: Whether to print detailed progress
+        rrn                 : Trained RRN model
+        mlps                : Trained MLP classifiers
+        test_kg             : Knowledge graph to test on (must share ontology with training)
+        device              : Device to run evaluation on
+        verbose             : Whether to print detailed progress
+        test_base_facts     : Whether to test on base (training) facts as well, next to inferred facts
 
     Returns:
         Tuple of (class_accuracies, triple_accuracies),
@@ -331,43 +358,55 @@ def test_on_knowledge_graph(
     mlps.eval()
 
     # Preprocess the test knowledge graph
-    triples, membership_labels = preprocess_knowledge_graph(
-        test_kg, data_type=data_type
-    )
+    preprocessed_data = preprocess_knowledge_graph(test_kg)
+    base_triples = preprocessed_data["base_triples"]
+    base_memberships = preprocessed_data["base_memberships"]
+    inferred_triples = preprocessed_data["inferred_triples"]
+    inferred_memberships = preprocessed_data["inferred_memberships"]
+    all_triples = preprocessed_data["all_triples"]
+    all_memberships = preprocessed_data["all_memberships"]
+
+    # If testing on base facts as well, set target to ALL facts,
+    # else only on inferred facts.
+    if test_base_facts:
+        target_triples = all_triples
+        target_memberships = all_memberships
+    else:
+        target_triples = inferred_triples
+        target_memberships = inferred_memberships
 
     if verbose:
         print("Test KG Statistics:")
         print(f"  Individuals: {len(test_kg.individuals)}")
-        print(f"  Triples ({data_type.name}):    {len(triples)}")
+        print(f"  Triples:    {len(target_triples)}")
         print(
-            f"        Of which positive triples: {sum(1 for t in triples if t.positive)}"
+            f"        Of which positive triples: {sum(1 for t in target_triples if t.positive)}"
         )
         print(
-            f"        Of which negative triples: {sum(1 for t in triples if not t.positive)}"
+            f"        Of which negative triples: {sum(1 for t in target_triples if not t.positive)}"
         )
-        print(f"  Memberships ({data_type.name}): {len(membership_labels)}")
+        print(f"  Memberships: {len(target_memberships)}")
         print(
-            f"      Of which positive memberships: {sum(sum(1 for v in labels if v == 1) for labels in membership_labels)}"
+            f"      Of which positive memberships: {sum(sum(1 for v in labels if v == 1) for labels in target_memberships)}"
         )
         print(
-            f"      Of which negative memberships: {sum(sum(1 for v in labels if v == -1) for labels in membership_labels)}"
+            f"      Of which negative memberships: {sum(sum(1 for v in labels if v == -1) for labels in target_memberships)}"
         )
 
     # ------------------------------- RUN INFERENCE ------------------------------ #
 
     # Disable gradient calculations for evaluation
     with torch.no_grad():
-        # Generate embeddings using RRN
-        embeddings = rrn(triples, membership_labels).to(device)
+        # Generate embeddings using RRN with BASE FACTS!
+        embeddings = rrn(base_triples, base_memberships).to(device)
 
-        # Evaluate class membership predictions
+        # Evaluate class membership predictions on target memberships
         class_accuracies = evaluate_classes(
-            mlps[0], embeddings, membership_labels, device
+            mlps[0], embeddings, target_memberships, device
         )
 
-        # Evaluate relation predictions
-        triple_accuracies = evaluate_triples(mlps, embeddings, triples, device)
-
+        # Evaluate relation predictions on target triples
+        triple_accuracies = evaluate_triples(mlps, embeddings, target_triples, device)
     return class_accuracies, triple_accuracies
 
 
@@ -379,7 +418,7 @@ def test_model(
     embedding_size: int = 100,
     iterations: int = 7,
     verbose: bool = True,
-    data_type: DataType = DataType.ALL,
+    test_base_facts: bool = True,
 ) -> dict:
     """
     Main testing function that loads a trained model and evaluates it on test data.
@@ -398,7 +437,7 @@ def test_model(
         embedding_size  : Dimensionality of entity embeddings
         iterations      : Number of RRN message-passing iterations
         verbose         : Whether to print detailed progress
-        data_type       : Type of data to use for testing (inferred, specific, all)
+        test_base_facts : Whether to test on base (training) facts as well, next to inferred facts
 
     Returns:
         Dictionary containing test results and statistics
@@ -494,7 +533,7 @@ def test_model(
             test_kg=test_kg,
             device=device,
             verbose=verbose,
-            data_type=data_type,
+            test_base_facts=test_base_facts,
         )
 
         # Overall accuracies
@@ -651,7 +690,7 @@ if __name__ == "__main__":
         embedding_size=EMBEDDING_SIZE,
         iterations=ITERATIONS,
         verbose=VERBOSE,
-        data_type=DATA_TYPE,
+        test_base_facts=TEST_BASE_FACTS,
     )
 
     # write results to a file

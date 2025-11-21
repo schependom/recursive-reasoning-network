@@ -148,38 +148,42 @@ def load_knowledge_graphs(
 
 
 def preprocess_knowledge_graph(
-    kg: KnowledgeGraph, data_type: DataType = DataType.ALL
-) -> Tuple[List[Triple], List[List[int]]]:
+    kg: KnowledgeGraph,
+) -> dict[str, List]:
     """
     Preprocesses a knowledge graph for training
 
     Args:
         kg:         Knowledge graph to preprocess
-        data_type:  Type of data to preprocess (inference, prediction, all)
 
     Returns:
-        Tuple containing:
-        - List of triples                               (facts = specified, inferred, or all based on data_type)
-        - List of membership vectors \in {-1,0,1}^|C|   (facts = specified, inferred, or all based on data_type)
+        Dictionary containing:
+        - List of   message passing     triples                                 (base facts = specified)
+        - List of   message passing     membership vectors \in {-1,0,1}^|C|     (base facts = specified)
+        - List of   TEST                triples                                 (inferred)
+        - List of   TEST                membership vectors                      (inferred)
+        - List of   ALL=target          triples                                 (specified AND inferred)
+        - List of   ALL=target          membership vectors                      (specified AND inferred)
     """
 
-    # Triples to use based on data_type
-    if data_type == DataType.ALL:
-        triples = kg.triples
-    elif data_type == DataType.SPEC:
-        triples = [triple for triple in kg.triples if not triple.is_inferred]
-    elif data_type == DataType.INF:
-        triples = [triple for triple in kg.triples if triple.is_inferred]
+    # Base fact triples and all triples
+    base_triples = [t for t in kg.triples if not t.is_inferred]
+    inferred_triples = [t for t in kg.triples if t.is_inferred]
+    all_triples = kg.triples
 
-    # Create membership vectors for each individual
-    memberships = []
+    # Base fact memberships and all memberships
+    base_memberships = []
+    inferred_memberships = []
+    all_memberships = []
 
     # Non-factual memberships are memberships that are not known facts,
     # i.e., they are not explicitly stated in the knowledge graph.
 
     for individual in kg.individuals:
         # Initialize vectors with zeros
-        membership_vec = [0] * len(kg.classes)
+        base_membership_vec = [0] * len(kg.classes)
+        inferred_membership_vec = [0] * len(kg.classes)
+        all_membership_vec = [0] * len(kg.classes)
 
         # Populate based on class memberships
         for membership in individual.classes:
@@ -197,27 +201,35 @@ def preprocess_knowledge_graph(
             #
             membership_value = 1 if membership.is_member else -1
 
-            # Check data_type to decide which vectors to populate
-            if data_type == DataType.ALL:
-                membership_vec[class_idx] = membership_value
-            elif data_type == DataType.SPEC:
-                if not membership.is_inferred:
-                    membership_vec[class_idx] = membership_value
-            elif data_type == DataType.INF:
-                if membership.is_inferred:
-                    membership_vec[class_idx] = membership_value
+            # Set in all membership vector
+            all_membership_vec[class_idx] = membership_value
+
+            # Only set in base membership vector
+            if not membership.is_inferred:
+                base_membership_vec[class_idx] = membership_value
+            else:
+                inferred_membership_vec[class_idx] = membership_value
 
         # Note that 1_KB(i) = 0 for all classes C where the membership is unknown
         # (i.e., not explicitly stated in individual.classes)
 
-        memberships.append(membership_vec)
+        base_memberships.append(base_membership_vec)
+        inferred_memberships.append(inferred_membership_vec)
+        all_memberships.append(all_membership_vec)
 
-    return triples, memberships
+    return {
+        "base_triples": base_triples,
+        "base_memberships": base_memberships,
+        "inferred_triples": inferred_triples,
+        "inferred_memberships": inferred_memberships,
+        "all_triples": all_triples,
+        "all_memberships": all_memberships,
+    }
 
 
 def custom_collate_fn(
-    batch: List[Tuple[List[Triple], List[List[int]]]],
-) -> Tuple[List[Triple], List[List[int]]]:
+    batch: List[dict[str, List]],
+) -> dict[str, List]:
     """
     Custom collate function for DataLoader.
 
@@ -227,12 +239,16 @@ def custom_collate_fn(
     (and only) element of the batch.
 
     Args:
-        batch:  Batch of preprocessed knowledge graphs (list of knowledge graph tuples)
-                List of tuples:
-                - List[Triple]      -> List of triples in the knowledge graph
-                - List[List[int]]   -> List of membership vectors for individuals
+        batch:  Batch of preprocessed knowledge graphs (list of knowledge graph dictionaries)
+                List of dictionaries with:
+                -   base_triples
+                -   base_memberships
+                -   inferred_triples
+                -   inferred_memberships
+                -   all_triples
+                -   all_memberships
 
     Returns:
-        Single (first) preprocessed knowledge graph tuple (triples, memberships)
+        Single (first) preprocessed knowledge graph dictionary
     """
     return batch[0]

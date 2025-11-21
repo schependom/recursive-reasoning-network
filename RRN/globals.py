@@ -1,8 +1,8 @@
 # Global constants for RRN configuration
 
-from data_structures import DataType
-
 EMBEDDING_SIZE = 100
 ITERATIONS = 7
 VERBOSE = True
-DATA_TYPE = DataType.ALL # ALL/INF/SPEC
+TEST_BASE_FACTS = (
+    False  # Whether to test on base (training) facts as well, next to inferred facts
+)
