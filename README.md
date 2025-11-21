@@ -42,10 +42,11 @@ source ~/.bashrc
 
 ### Generating the _Family Tree_ data
 
-To generate the _family tree_ datasets, navigate to the `data/family-tree` directory:
+To generate the _family tree_ datasets, navigate to the `data/family-tree` directory and make an `out` directory to store the generated data:
 
 ```bash
 cd data/family-tree
+mkdir -p out
 ```
 
 Then, you can run the `generate.sh` script with the desired options:
