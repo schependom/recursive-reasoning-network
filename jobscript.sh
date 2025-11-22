@@ -3,7 +3,7 @@
 
 ### General options
 ### -- specify queue --
-#BSUB -q gpuv100
+#BSUB -q gpua100
 ### -- set the job Name --
 #BSUB -J train-bachelor-thesis
 ### -- ask for number of cores (default: 1) --
@@ -37,9 +37,9 @@ if [ -z "${REPO}" ]; then
 fi
 
 
-echo "making directory for run"
-date=$(date +%Y%m%d_%H%M)
-mkdir -p "${REPO}/RRN/checkpoints/${date}"
+# echo "making directory for run"
+# date=$(date +%Y%m%d_%H%M)
+# mkdir -p "${REPO}/RRN/checkpoints/${date}"
 
 
 # Activate venv

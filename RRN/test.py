@@ -366,12 +366,24 @@ def test_on_knowledge_graph(
     all_triples = preprocessed_data["all_triples"]
     all_memberships = preprocessed_data["all_memberships"]
 
+    print("There are...")
+    print(f"  {len(base_triples)} BASE triples")
+    print(f"  {len(inferred_triples)} INFERRED triples")
+    print(f"  {len(all_triples)} TOTAL triples")
+    print(f"  {len(base_memberships)} BASE memberships")
+    print(f"  {len(inferred_memberships)} INFERRED memberships")
+    print(f"  {len(all_memberships)} TOTAL memberships")
+
+    print(f"Running Evaluation on {'BASE + INFERRED facts' if test_base_facts else 'INFERRED facts ONLY'}")
+
     # If testing on base facts as well, set target to ALL facts,
     # else only on inferred facts.
     if test_base_facts:
+        print("Setting TARGET = ALL facts (base + inferred)")
         target_triples = all_triples
         target_memberships = all_memberships
     else:
+        print("Setting TARGET = INFERRED facts ONLY")
         target_triples = inferred_triples
         target_memberships = inferred_memberships
 
@@ -398,6 +410,7 @@ def test_on_knowledge_graph(
     # Disable gradient calculations for evaluation
     with torch.no_grad():
         # Generate embeddings using RRN with BASE FACTS!
+        print("Initializing RRN with BASE facts...")
         embeddings = rrn(base_triples, base_memberships).to(device)
 
         # Evaluate class membership predictions on target memberships
@@ -518,9 +531,14 @@ def test_model(
         "num_triples": [],
     }
 
+    if test_base_facts:
+        what_on = "BASE + INFERRED facts"
+    else:
+        what_on = "INFERRED facts ONLY"
+
     if verbose:
         print("\n" + "=" * 70)
-        print("Running Evaluation")
+        print(f"Running Evaluation on {what_on}")
         print("=" * 70)
 
     for idx, test_kg in enumerate(test_kgs):
@@ -608,7 +626,7 @@ def test_model(
         print("=" * 70)
         print(f"Number of test KGs:        {len(test_kgs)}")
 
-        print("\nClass Membership Predictions:")
+        print(f"\nClass Membership Predictions ({what_on}):")
         print(
             f"  Mean Accuracy:           {results['mean_class_accuracy']:.4f} ({results['mean_class_accuracy'] * 100:.2f}%)"
         )
@@ -619,16 +637,16 @@ def test_model(
             f"  Mean Positive Accuracy:  {results['mean_positive_class_accuracy']:.4f} ({results['mean_positive_class_accuracy'] * 100:.2f}%)"
         )
         print(
-            f"  Positive Accuracy Range:   {results['min_positive_class_accuracy']:.4f} - {results['max_positive_class_accuracy']:.4f}"
+            f"  Positive Accuracy Range: {results['min_positive_class_accuracy']:.4f} - {results['max_positive_class_accuracy']:.4f}"
         )
         print(
             f"  Mean Negative Accuracy:  {results['mean_negative_class_accuracy']:.4f} ({results['mean_negative_class_accuracy'] * 100:.2f}%)"
         )
         print(
-            f"  Negative Accuracy Range:   {results['min_negative_class_accuracy']:.4f} - {results['max_negative_class_accuracy']:.4f}"
+            f"  Negative Accuracy Range: {results['min_negative_class_accuracy']:.4f} - {results['max_negative_class_accuracy']:.4f}"
         )
 
-        print("\nRelation Predictions:")
+        print(f"\nRelation Predictions ({what_on}):")
         print(
             f"  Mean Accuracy:           {results['mean_triple_accuracy']:.4f} ({results['mean_triple_accuracy'] * 100:.2f}%)"
         )
@@ -639,13 +657,13 @@ def test_model(
             f"  Mean Positive Accuracy:  {results['mean_positive_triple_accuracy']:.4f} ({results['mean_positive_triple_accuracy'] * 100:.2f}%)"
         )
         print(
-            f"  Positive Accuracy Range:   {results['min_positive_triple_accuracy']:.4f} - {results['max_positive_triple_accuracy']:.4f}"
+            f"  Positive Accuracy Range: {results['min_positive_triple_accuracy']:.4f} - {results['max_positive_triple_accuracy']:.4f}"
         )
         print(
             f"  Mean Negative Accuracy:  {results['mean_negative_triple_accuracy']:.4f} ({results['mean_negative_triple_accuracy'] * 100:.2f}%)"
         )
         print(
-            f"  Negative Accuracy Range:   {results['min_negative_triple_accuracy']:.4f} - {results['max_negative_triple_accuracy']:.4f}"
+            f"  Negative Accuracy Range: {results['min_negative_triple_accuracy']:.4f} - {results['max_negative_triple_accuracy']:.4f}"
         )
         print("=" * 70)
 
@@ -671,7 +689,7 @@ if __name__ == "__main__":
 
     # Get the base data directory
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    data_dir = os.path.join(BASE_DIR, "data/family-tree/out/test-20")
+    data_dir = os.path.join(BASE_DIR, "data/family-tree/out-reldata/test-20")
 
     # print to std error
     print(f"Data directory: {data_dir}")

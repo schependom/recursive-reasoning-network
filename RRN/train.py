@@ -105,7 +105,7 @@ def compute_loss(
 
         embeddings:         Entity embeddings from RRN (Bt x d)
 
-        triples:            List of Triples in the batch
+        triples:            List of ALL Triples in the batch (both inferred and base facts)
 
         membership_targets: List of class membership labels for individuals in the batch
                             This is a list of lists, where each inner list corresponds to
@@ -114,6 +114,7 @@ def compute_loss(
                                 -1 :    not a member
                                 1:      member
                                 0:      otherwise
+                            Note that we use ALL memberships (both base facts and inferred)
 
         device:             Device to run computations on
 
@@ -621,7 +622,7 @@ if __name__ == "__main__":
 
     print(f"Base dir: {BASE_DIR}")
 
-    data_dir = os.path.join(BASE_DIR, "data/family-tree/out/train-200")
+    data_dir = os.path.join(BASE_DIR, "data/family-tree/out-reldata/train-200")
 
     print(f"Data directory: {data_dir}")
 
