@@ -131,7 +131,7 @@ To train the model on a High Performance Computing (HPC) cluster, you can use th
 
 ### Setup SSH
 
-First, create an SSH key pair if you don't have one already:
+First, create an SSH key pair on your local machine if you don't have one already:
 
 ```bash
 ssh-keygen -t ed25519
@@ -149,7 +149,7 @@ Now, copy the public key to the HPC server. You can do this by logging into the 
 ssh-copy-id -i ~/.ssh/id_ed25519.pub <your-username>@<host>
 ```
 
-Next, setup the SSH details of your `<host>` in `~/.ssh/config` (Unix), so that you don't have to type in the full details every time you want to connect:
+Next, setup the SSH details of your `<host>` in `~/.ssh/config` (for macOS - check file path for other Unix system), so that you don't have to type in the full details every time you want to connect:
 
 ```txt
 Host <host>
@@ -157,8 +157,8 @@ Host <host>
   Port <port>
   User <your-username>
   IdentityFile id_ed25519
-  AddKeysToAgent yes
-  UseKeychain yes
+  AddKeysToAgent yes        # macOS
+  UseKeychain yes           # macOS
 ```
 
 ### Connect to HPC
@@ -170,7 +170,7 @@ ssh <host>
 ```
 
 Type in the SSH (and host) password(s) when prompted.
-Switch to the assigned node if necessary:
+Switch to a **compute** node, if you are on the login node right now:
 
 ```bash
 linuxsh
@@ -187,7 +187,7 @@ mkdir ~/rrn
 ... and clone this repository directly into the project folder:
 
 ```bash
-git clone https://github.com/schependom/recursive-reasoning-network.git ~/rrn
+git clone git@github.com:schependom/recursive-reasoning-network.git ~/rrn
 ```
 
 ### Python environment
@@ -241,6 +241,8 @@ python3 -m pip install --upgrade -r requirements.txt
 
 To submit a job to the HPC cluster, use the provided `jobscript.sh`.
 E.g. `bsub < jobscript.sh` on LSF clusters.
+
+The jobscript I provide should be submitted from the project root (*not* from `RRN/`).
 
 ## References
 
